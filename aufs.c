@@ -125,15 +125,7 @@ static int aufs_fill_super(struct super_block *sb, void *data, int silent)
 static struct dentry *aufs_mount_func(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
-	struct dentry *pslot;
-
-	mount_single(fs_type, flags, data, aufs_fill_super);
-
-	pslot = aufs_create_file("slot1", S_IFREG | S_IRUGO, NULL, NULL, NULL);
-	if(!pslot) 
-		 printk(KERN_WARNING "aufs_create_file() failed!");
-
-	return 0;
+	return mount_single(fs_type, flags, data, aufs_fill_super);
 }
 
 #if 0
@@ -183,13 +175,9 @@ static int aufs_create_by_name(const char *name, mode_t mode,
 		return -EFAULT;
 	}
 
-	printk("%s: lookup_one_len.\n", __func__);
-
 	*dentry = NULL;
-	//mutex_lock(&parent->d_inode->i_mutex);
+	mutex_lock(&d_inode(parent)->i_mutex);
 	*dentry = lookup_one_len(name, parent, strlen(name));
-
-	printk("%s: after lookup_one_len.\n", __func__);
 	
 	if (!IS_ERR(dentry)) {
 		if ((mode & S_IFMT) == S_IFDIR)
@@ -198,7 +186,7 @@ static int aufs_create_by_name(const char *name, mode_t mode,
 			error = aufs_create(parent->d_inode, *dentry, mode);
 	} else
 		error = PTR_ERR(dentry);
-	//mutex_unlock(&parent->d_inode->i_mutex);
+	mutex_unlock(&d_inode(parent)->i_mutex);
 
 	return error;
 }
@@ -211,16 +199,11 @@ struct dentry *aufs_create_file(const char *name, mode_t mode,
 	int error;
 
 	printk("aufs: creating file '%s'\n", name);
-	printk("%s: simple_pin_fs.\n", __func__);
 
 	error = simple_pin_fs(&au_fs_type, &aufs_mount, &aufs_mount_count);
-
-	printk("%s: simple_pin_fs ret is: %d.\n", __func__, error);
 	
 	if (error)
 		goto exit;
-
-	printk("%s: aufs_create_by_name.\n", __func__);
 
 	error = aufs_create_by_name(name, mode, parent, &dentry);
 	if (error) {
@@ -251,13 +234,18 @@ EXPORT_SYMBOL_GPL(aufs_create_dir);
 
 static int __init aufs_init(void)
 {
-	int retval;
+	struct dentry *pslot = NULL;
+	int retval = 0;
 
 	//retval = sysfs_create_mount_point(kernel_kobj, "aufs");
 	//printk("sysfs_create_mount_point ret is: %d.\n", retval);
 	
 	retval = register_filesystem(&au_fs_type);
 	printk("register_filesystem ret is: %d.\n", retval);
+
+	pslot = aufs_create_file("file", S_IFREG | S_IRUGO, NULL, NULL, NULL);
+	if(!pslot) 
+		 printk(KERN_WARNING "aufs_create_file() failed!");
 
 #if 0
 	struct dentry *pslot;
